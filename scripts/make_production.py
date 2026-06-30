@@ -51,7 +51,8 @@ PROD_ENV_EXAMPLE = '''# Core overrides (DIGEST_<Config field>). The installer wr
 # Music catalog: download the prebuilt file with scripts/fetch_catalog.py, or build your
 # own with scripts/build_music_catalog.py. Point the core at it:
 # DIGEST_MUSIC_CATALOG_PATH=/data/music_catalog.sqlite
-# DIGEST_MUSIC_CATALOG_URL=<release-or-huggingface-url>   # used by fetch_catalog.py
+DIGEST_MUSIC_CATALOG_URL=https://github.com/dennisbiber/MediaDigest/releases/download/v0.1.0/music_catalog.sqlite
+DIGEST_MUSIC_CATALOG_SHA256=0117201950a6ede74bf6f77995b53529397ade9eea6410a5b81fa44de9c15fe0
 # DIGEST_MUSIC_AXIS_WEIGHTS=genre:1.0,tag:0.5,decade:0.3,area:0.25
 '''
 
@@ -99,6 +100,9 @@ def install_docs(dst: str):
     prod_readme = os.path.join(dst, "docs/README.production.md")
     if os.path.exists(prod_readme):
         shutil.copy2(prod_readme, os.path.join(dst, "README.md"))
+    prod_install = os.path.join(dst, "docs/INSTALL.production.md")
+    if os.path.exists(prod_install):
+        shutil.copy2(prod_install, os.path.join(dst, "INSTALL.md"))
     with open(os.path.join(dst, "deploy/.env.example"), "w") as f:
         f.write(PROD_ENV_EXAMPLE)
     if not os.path.exists(os.path.join(dst, "LICENSE")):

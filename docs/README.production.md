@@ -39,8 +39,13 @@ regenerated from upstream dumps). You have two ways to get it:
 1. **Download the prebuilt catalog** (recommended for most people):
 
    ```bash
-   python scripts/fetch_catalog.py --url <CATALOG_URL> --out ~/digest-data-live/music_catalog.sqlite
+   python scripts/fetch_catalog.py \
+     --url https://github.com/dennisbiber/MediaDigest/releases/download/v0.1.0/music_catalog.sqlite \
+     --sha256 0117201950a6ede74bf6f77995b53529397ade9eea6410a5b81fa44de9c15fe0 \
+     --out ~/mediadigest-data/music_catalog.sqlite
    ```
+
+   The `--sha256` is optional but recommended — it verifies the download is intact.
 
 2. **Build it yourself** from a MusicBrainz JSON artist dump (see
    `scripts/build_music_catalog.py --help`). This is what produces the prebuilt file, and

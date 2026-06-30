@@ -1,0 +1,36 @@
+# secrets & machine-specific config — NEVER commit
+deploy/.env
+*.env
+!*.env.example
+admin.token
+*.token
+
+# data artifacts (distributed via Releases/HF, not the repo)
+*.sqlite
+*.db
+*.db-wal
+*.db-shm
+data/
+digest-data*/
+music_catalog*.sqlite
+
+# dumps & large inputs
+*.tar.xz
+*.tar.bz2
+*.tar.gz
+mbdump/
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# dev scratch
+/mnt/
+*.log
+transcripts/
+journal.txt
