@@ -1,0 +1,44 @@
+# Open WebUI + Pipelines. Both mount the shared token volume: the pipeline writes the
+# 'owui' token on startup, the OWUI server (Tool/Actions) reads it. Both reach the core
+# and the Ollama container by service name on the shared network.
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    environment:
+      # point a FRESH OWUI at the container Ollama and the pipelines server (these seed
+      # first-boot config only; an existing/restored webui.db keeps its own settings)
+      OLLAMA_BASE_URL: http://ollama:11434
+      ENABLE_API_KEY: "true"
+      OPENAI_API_BASE_URL: http://pipelines:9099
+      OPENAI_API_KEY: "0p3n-w3bu!"
+      DIGEST_CORE_URL: http://digest-core:8787
+      DIGEST_TOKEN_PATH: /run/digest/owui.token
+    volumes:
+      - owui-data:/app/backend/data
+      - digest-secrets:/run/digest
+    ports:
+      - "3000:8080"
+    networks: [digest-net]
+    restart: unless-stopped
+  pipelines:
+    image: ghcr.io/open-webui/pipelines:main
+    container_name: pipelines
+    environment:
+      DIGEST_CORE_URL: http://digest-core:8787
+      DIGEST_TOKEN_PATH: /run/digest/owui.token
+    volumes:
+      # mount a dir holding only the digest pipeline so it loads + bootstraps the token
+      - ./pipeline:/app/pipelines
+      - digest-secrets:/run/digest
+    ports:
+      - "9099:9099"
+    networks: [digest-net]
+    restart: unless-stopped
+
+volumes:
+  owui-data:
+  digest-secrets:
+networks:
+  digest-net:
+    external: true

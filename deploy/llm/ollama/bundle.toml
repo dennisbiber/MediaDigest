@@ -1,0 +1,8 @@
+name = "Ollama"
+description = "Local Ollama server in a container (GPU by default, CPU fallback; pulls your default model)"
+type = "compose"
+gpu_compose = "docker-compose.gpu.yml"
+
+[core_env]
+DIGEST_OLLAMA_BASE_URL = "http://ollama:11434"
+DIGEST_JUDGE_MODEL = "qwen3:14b"

@@ -1,0 +1,16 @@
+# Local Ollama. The installer adds docker-compose.gpu.yml automatically when an
+# NVIDIA runtime is detected; this base file is the CPU fallback.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    networks: [digest-net]
+    restart: unless-stopped
+
+volumes:
+  ollama-data:
+networks:
+  digest-net:
+    external: true

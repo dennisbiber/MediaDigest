@@ -1,0 +1,25 @@
+# The core service: the single owner of the data volume, the API, and the scheduler.
+services:
+  digest-core:
+    build:
+      context: ../..
+      dockerfile: deploy/core/Dockerfile
+    image: digest-core:latest
+    container_name: digest-core
+    env_file:
+      - ../.env
+    volumes:
+      # Host directory that holds digest.db (+ options/sources). Created fresh if empty,
+      # reused as-is if it already has a digest.db — set DIGEST_DATA_HOST in ../.env to
+      # point at an existing data directory (e.g. a copy of your old bind-mount).
+      - ${DIGEST_DATA_HOST:-./data}:/data
+    ports:
+      - "8787:8787"                  # published so the host CLI can reach the core
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # so the core can reach host services (ntfy)
+    networks: [digest-net]
+    restart: unless-stopped
+
+networks:
+  digest-net:
+    external: true

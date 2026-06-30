@@ -1,0 +1,11 @@
+# GPU overlay for Ollama — layered on the base compose by the installer when an
+# NVIDIA container runtime is present. Requires the NVIDIA Container Toolkit on the host.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

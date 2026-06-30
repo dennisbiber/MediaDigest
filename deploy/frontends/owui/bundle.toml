@@ -1,0 +1,9 @@
+name = "Open WebUI"
+description = "OWUI chat UI + pipelines; digests delivered as chats with 👍/👎 rating buttons, pushed to your phone via ntfy"
+type = "compose"
+
+[core_env]
+DIGEST_DELIVERY_SINK = "owui"
+DIGEST_OWUI_BASE_URL = "http://open-webui:8080"
+# OWUI chats don't push to a phone, so this front-end brings ntfy as its notifier:
+DIGEST_NOTIFIER = "ntfy"

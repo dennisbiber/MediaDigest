@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digestcore"
+version = "1.0.0"
+description = "Front-end-agnostic personalized digest engine (RSS/arXiv/music) with an LLM judge and a feedback loop."
+authors = [{ name = "Dennis Biber" }]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+    "pydantic>=2",
+    "ytmusicapi",
+    "tzdata",
+]
+
+[project.scripts]
+digest = "interfaces.cli.__main__:main"
+digest-core = "interfaces.service.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "digestcore",
+    "digestcore.adapters",
+    "digestcore.delivery",
+    "digestcore.service",
+    "interfaces",
+    "interfaces.cli",
+    "interfaces.service",
+]
+
+[tool.setuptools.package-data]
+digestcore = ["data/*.json"]
