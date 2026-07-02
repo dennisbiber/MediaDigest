@@ -22,6 +22,7 @@ import requests
 
 from digestcore.sources import load_options, load_sources, default_news_options, _localname
 from digestcore.models import Candidate, SourceAdapter
+from digestcore.net import AdapterRetryable, is_transport_error
 
 
 class RssNewsAdapter(SourceAdapter):
@@ -116,9 +117,9 @@ class RssNewsAdapter(SourceAdapter):
         try:
             r = requests.get(url, headers={"User-Agent": self.UA}, timeout=20)
             r.raise_for_status()
-            return domain, self._parse_feed(r.text, domain), None
+            return domain, self._parse_feed(r.text, domain), None, False
         except Exception as e:                                   # noqa: BLE001 (report any failure)
-            return domain, [], str(e)[:120]
+            return domain, [], str(e)[:120], is_transport_error(e)
 
     # ---- user-agnostic fetch + cluster (cacheable) ----
     def _build_pool(self, window_days: int) -> list[dict]:
@@ -128,16 +129,27 @@ class RssNewsAdapter(SourceAdapter):
 
         health: dict[str, object] = {}
         articles: list[dict] = []
+        n_transport = 0
         with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as ex:
-            for domain, items, err in ex.map(lambda f: self._fetch_feed(*f), feeds):
+            for domain, items, err, transport in ex.map(lambda f: self._fetch_feed(*f), feeds):
                 if err:
                     health[domain] = f"ERR: {err}"
+                    n_transport += 1 if transport else 0
                     continue
                 kept = [it for it in items if it["published"] is None or it["published"] >= window_start]
                 health[domain] = len(kept)
                 articles.extend(kept)
         self.last_health = health
         print("news feed health: " + self._health_summary())
+
+        # News tolerates individual feeds being down by design (it clusters across
+        # outlets). But if nothing came through AND the failures were transport-level,
+        # the network is down rather than a few dead feeds — retry instead of
+        # reporting a misleading "nothing new".
+        n_live = sum(1 for v in health.values() if isinstance(v, int) and v > 0)
+        if n_live == 0 and n_transport > 0:
+            raise AdapterRetryable(
+                f"news feeds unreachable — {n_transport} of {len(feeds)} failed to resolve")
 
         # dedupe by url (fall back to title)
         seen, uniq = set(), []
@@ -199,6 +211,10 @@ class RssNewsAdapter(SourceAdapter):
         return " | ".join(parts)
 
     def health_report(self) -> str:
+        return self._health_summary()
+
+    def diagnostic(self) -> str:
+        """Per-run source health, surfaced by the runner alongside this sub."""
         return self._health_summary()
 
     # ---- per-user candidates (exclusion + qualify) ----

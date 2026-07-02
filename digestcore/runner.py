@@ -23,19 +23,26 @@ from digestcore.profile import ProfileService
 from digestcore.scheduler import cron_match, safe_zone
 from digestcore.delivery.base import DeliverySink, Notifier, NullNotifier
 from digestcore.adapters import ADAPTERS
+from digestcore.net import AdapterRetryable
 
 
 @dataclass
 class SubRun:
     name: str
     count: int = 0
-    error: str = ""
+    error: str = ""       # a hard failure (a bug); shown as an error
+    retry: str = ""        # a transport failure; nothing sent, next run retries
+    note: str = ""         # per-run source diagnostic from the adapter that ran
 
 
 @dataclass
 class RunReport:
     runs: list = field(default_factory=list)
-    health: str = ""
+
+    @property
+    def health(self) -> str:
+        # scoped to the adapters that actually ran this batch — no stale global readout
+        return "; ".join(f"{r.name}: {r.note}" for r in self.runs if r.note)
 
     @property
     def message(self) -> str:
@@ -45,12 +52,15 @@ class RunReport:
         for r in self.runs:
             if r.error:
                 lines.append(f"- {r.name}: error — {r.error}")
+            elif r.retry:
+                lines.append(f"- {r.name}: {r.retry}; nothing sent, will retry next run")
             elif r.count:
                 lines.append(f"- {r.name}: delivered {r.count} items")
             else:
                 lines.append(f"- {r.name}: nothing new")
-        out = "Run complete:\n" + "\n".join(lines)
-        return out + (f"\n\nnews feed health: {self.health}" if self.health else "")
+            if r.note:
+                lines.append(f"    · {r.note}")
+        return "Run complete:\n" + "\n".join(lines)
 
 
 class DigestRunner:
@@ -95,16 +105,28 @@ class DigestRunner:
                 if not q or q in r["name"].lower() or r["name"].lower() in q]
         return self._run_many(rows)
 
+    def _adapter_diagnostic(self, adapter_key: str) -> str:
+        """This run's source diagnostic from the adapter that produced it, if any.
+        Read right after the sub runs, so it reflects this batch — not a stale
+        global readout, and never an adapter that didn't run."""
+        fn = getattr(ADAPTERS.get(adapter_key), "diagnostic", None)
+        try:
+            return fn() if callable(fn) else ""
+        except Exception:  # noqa: BLE001 - a diagnostic must never break a run
+            return ""
+
     def _run_many(self, rows: list[dict]) -> RunReport:
         report = RunReport()
         for sub in rows:
             try:
-                report.runs.append(SubRun(sub["name"], count=self.run_subscription(sub)))
+                sr = SubRun(sub["name"], count=self.run_subscription(sub))
+            except AdapterRetryable as e:
+                # transport failure — passive retry, nothing delivered or marked sent
+                sr = SubRun(sub["name"], retry=str(e))
             except Exception as e:  # noqa: BLE001
-                report.runs.append(SubRun(sub["name"], error=str(e)))
-        news = ADAPTERS.get("news")
-        if hasattr(news, "health_report"):
-            report.health = news.health_report()
+                sr = SubRun(sub["name"], error=str(e))
+            sr.note = self._adapter_diagnostic(sub["adapter"])
+            report.runs.append(sr)
         return report
 
     # ---- scheduler tick (maps to OWUI Pipeline._tick) ----
@@ -114,5 +136,7 @@ class DigestRunner:
             if cron_match(sub["cron"], local):
                 try:
                     self.run_subscription(sub)
+                except AdapterRetryable as e:
+                    print(f"digest retry ({sub.get('name')}): {e} — will retry next scheduled run")
                 except Exception as e:  # noqa: BLE001
                     print(f"digest run error ({sub.get('name')}): {e}")

@@ -18,9 +18,9 @@ Config (env, set by the core):
 import os
 import sqlite3
 import hashlib
-import urllib.parse
 
 from digestcore.models import Candidate, SourceAdapter
+from digestcore.net import AdapterRetryable, is_transport_error
 from digestcore.adapters.catalog_store import (
     open_catalog, resolve_seeds, similar_artists, artist_rows,
     norm_name, DEFAULT_AXIS_WEIGHTS, DEFAULT_EDGE_WEIGHT)
@@ -41,22 +41,35 @@ def _parse_axis_weights(spec: str) -> dict:
 
 
 def _ytmusic_linker(artist: str):
-    """Best-effort keyless link to a representative track. Returns (track, url).
-    Degrades to a YouTube Music search URL if ytmusicapi is unavailable/offline."""
+    """Keyless link to a representative track for an artist.
+
+    Three outcomes, kept distinct on purpose:
+      * a real hit  -> ``(track, watch_url)``
+      * no song     -> ``None``  (reachable, just nothing found: caller skips and
+                        a lower-ranked artist backfills — never a bare-artist link)
+      * unreachable -> raises ``AdapterRetryable`` (DNS/refused/timeout) so the run
+                        retries instead of shipping junk.
+
+    A non-transport error (e.g. a library-internal hiccup on one lookup) is treated
+    as a no-hit and skipped, not as a network outage — we only cry "network" when
+    the failure is unambiguously transport.
+    """
     try:
         from ytmusicapi import YTMusic
         yt = YTMusic()
         hits = yt.search(artist, filter="songs", limit=1) or []
-        if hits:
-            h = hits[0]
-            vid = h.get("videoId")
-            track = h.get("title") or ""
-            if vid:
-                return track, f"https://music.youtube.com/watch?v={vid}"
-    except Exception:
-        pass
-    q = urllib.parse.quote(artist)
-    return "", f"https://music.youtube.com/search?q={q}"
+    except AdapterRetryable:
+        raise
+    except Exception as e:  # noqa: BLE001 - classify, don't swallow blindly
+        if is_transport_error(e):
+            raise AdapterRetryable(f"music resolver unreachable ({type(e).__name__})") from e
+        return None
+    if hits:
+        h = hits[0]
+        vid = h.get("videoId")
+        if vid:
+            return h.get("title") or "", f"https://music.youtube.com/watch?v={vid}"
+    return None
 
 
 class MusicCatalogAdapter(SourceAdapter):
@@ -67,6 +80,10 @@ class MusicCatalogAdapter(SourceAdapter):
     def __init__(self, linker=None):
         # linker is injectable so tests don't hit the network
         self._link = linker or _ytmusic_linker
+        self.last_diagnostic = ""
+
+    def diagnostic(self) -> str:
+        return self.last_diagnostic
 
     def _catalog_path(self, valves) -> str:
         return (os.environ.get("DIGEST_MUSIC_CATALOG_PATH")
@@ -94,6 +111,7 @@ class MusicCatalogAdapter(SourceAdapter):
 
     def fetch_candidates(self, topic, window_days, context=None):
         context = context or {}
+        self.last_diagnostic = ""
         valves = context.get("valves")
         path = self._catalog_path(valves)
         if not os.path.exists(path):
@@ -128,6 +146,7 @@ class MusicCatalogAdapter(SourceAdapter):
         if ranked:
             hi = ranked[0][1] or 1.0
         out = []
+        skipped = 0
         for aid, score in ranked:
             row = rows.get(aid)
             if not row:
@@ -135,7 +154,11 @@ class MusicCatalogAdapter(SourceAdapter):
             artist = row["name"]
             if norm_name(artist) in neg_norm:
                 continue
-            track, url = self._link(artist)
+            resolved = self._link(artist)   # may raise AdapterRetryable -> run retries
+            if resolved is None:
+                skipped += 1
+                continue                    # reachable but no song for this artist: skip, backfill
+            track, url = resolved
             norm = score / hi if hi else 0.0
             tag = ("in your wheelhouse" if norm >= 0.6 else
                    "adjacent to your taste" if norm >= 0.3 else "a stretch from your usuals")
@@ -150,4 +173,6 @@ class MusicCatalogAdapter(SourceAdapter):
             ))
             if len(out) >= self.MAX_PICKS:
                 break
+        if skipped:
+            self.last_diagnostic = f"skipped {skipped} artist(s) with no track found"
         return out

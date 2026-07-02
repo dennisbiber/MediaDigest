@@ -289,7 +289,9 @@ class Handler(BaseHTTPRequestHandler):
             name = b.get("name")
             report = runner.run_named(name) if name else runner.run_all()
             return self._send(200, {"ok": True, "message": report.message,
-                                    "runs": [{"name": r.name, "count": r.count, "error": r.error}
+                                    "runs": [{"name": r.name, "count": r.count,
+                                              "error": r.error, "retry": r.retry,
+                                              "note": r.note}
                                              for r in report.runs],
                                     "health": report.health})
 

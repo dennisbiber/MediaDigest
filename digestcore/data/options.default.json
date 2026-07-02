@@ -1,0 +1,45 @@
+{
+  "adapters": {
+    "arxiv_hf": {
+      "label": "Research papers",
+      "topic_query": "an arXiv category expression, e.g. 'cat:cs.AI OR cat:cs.LG'",
+      "arxiv_codes": {
+        "AI / machine learning": "cs.AI, cs.LG, stat.ML",
+        "language / NLP": "cs.CL",
+        "computer vision": "cs.CV",
+        "robotics": "cs.RO",
+        "distributed / systems": "cs.DC",
+        "security / crypto": "cs.CR",
+        "optimization / math": "math.OC",
+        "quantum": "quant-ph"
+      },
+      "defaults": {"count": 5, "window_days": 7, "hour": 7, "day_of_week": "mon", "day_of_month": "*"}
+    },
+    "news": {
+      "label": "News stories",
+      "topic_query": "comma-separated categories to EXCLUDE (max 4); empty means all",
+      "max_exclusions": 4,
+      "categories": {
+        "Politics": "(election OR congress OR senate OR parliament OR legislation OR \"supreme court\")",
+        "World": "(diplomacy OR \"foreign policy\" OR \"united nations\" OR sanctions OR treaty)",
+        "Business": "(economy OR inflation OR \"stock market\" OR earnings OR recession OR \"interest rates\")",
+        "Technology": "(technology OR software OR startup OR semiconductor OR cybersecurity)",
+        "AI": "(\"artificial intelligence\" OR \"machine learning\" OR \"large language model\" OR chatbot)",
+        "Science": "(research OR \"scientific study\" OR physics OR astronomy OR discovery)",
+        "Health": "(health OR disease OR vaccine OR medicine OR \"public health\" OR outbreak)",
+        "Climate": "(climate OR \"global warming\" OR emissions OR \"renewable energy\" OR wildfire)",
+        "Sports": "(sport OR sports OR championship OR tournament OR playoff OR Olympics OR league OR match)",
+        "Entertainment": "(film OR movie OR music OR celebrity OR \"box office\" OR streaming OR singer OR actor)",
+        "Crime & Justice": "(trial OR lawsuit OR investigation OR verdict OR fraud OR indictment)",
+        "Conflict & Security": "(war OR military OR conflict OR ceasefire OR \"armed forces\")"
+      },
+      "defaults": {"count": 8, "window_days": 1, "hour": 7, "day_of_week": "*", "day_of_month": "*"}
+    },
+    "music": {
+      "label": "Music discovery (tracks)",
+      "topic_query": "comma-separated seed artists and/or genres to learn taste from, e.g. 'Radiohead, Khruangbin, shoegaze'",
+      "defaults": {"count": 10, "window_days": 1, "hour": 8, "day_of_week": "*", "day_of_month": "*"},
+      "needs": "a Last.fm API key set on the pipeline (LASTFM_API_KEY valve)"
+    }
+  }
+}

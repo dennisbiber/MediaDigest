@@ -7,6 +7,7 @@ from xml.etree import ElementTree as ET
 import requests
 
 from digestcore.models import Candidate, SourceAdapter
+from digestcore.net import AdapterRetryable, is_transport_error
 
 
 class ArxivHFAdapter(SourceAdapter):
@@ -15,16 +16,26 @@ class ArxivHFAdapter(SourceAdapter):
     ARXIV = "http://export.arxiv.org/api/query"
     HF = "https://huggingface.co/api/daily_papers"
     NS = {"a": "http://www.w3.org/2005/Atom"}
+    last_diagnostic = ""      # HF (secondary) degradation from the last run, if any
+
+    def diagnostic(self) -> str:
+        return self.last_diagnostic
 
     def fetch_candidates(self, topic: str, window_days: int,
                          context: Optional[dict] = None) -> list[Candidate]:
         cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=window_days)
         by_id: dict[str, Candidate] = {}
+        self.last_diagnostic = ""
 
         params = {"search_query": topic, "sortBy": "submittedDate",
                   "sortOrder": "descending", "max_results": 150}
-        r = requests.get(self.ARXIV, params=params, timeout=30)
-        r.raise_for_status()
+        try:
+            r = requests.get(self.ARXIV, params=params, timeout=30)
+            r.raise_for_status()
+        except Exception as e:  # noqa: BLE001 - classify: transport retries, the rest is a real error
+            if is_transport_error(e):
+                raise AdapterRetryable(f"arXiv unreachable ({type(e).__name__})") from e
+            raise
         feed = ET.fromstring(r.text)
         for entry in feed.findall("a:entry", self.NS):
             arxiv_url = entry.findtext("a:id", default="", namespaces=self.NS)
@@ -42,6 +53,7 @@ class ArxivHFAdapter(SourceAdapter):
                 signals={"hf_upvotes": 0},
             )
 
+        hf_fail = 0
         for d in range(window_days):
             day = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=d)).strftime("%Y-%m-%d")
             try:
@@ -61,5 +73,12 @@ class ArxivHFAdapter(SourceAdapter):
                             signals={"hf_upvotes": upvotes},
                         )
             except requests.RequestException:
+                # HF is a secondary curation signal — degrade and report, never abort:
+                # arXiv recall still stands, so the run delivers on that alone.
+                hf_fail += 1
                 continue
+        if hf_fail:
+            self.last_diagnostic = (
+                f"Hugging Face daily-papers unavailable ({hf_fail}/{window_days} days); "
+                "ranked on arXiv recall only")
         return list(by_id.values())
